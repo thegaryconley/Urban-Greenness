@@ -1,0 +1,172 @@
+---
+title: "Green Hydro"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+
+# Install packages
+install.packages("readxl")
+install.packages("spdep")
+install.packages("ggplot2")
+install.packages("splm")
+install.packages("dplyr")
+install.packages("plm")
+install.packages("spdep")
+install.packages("rgdal")
+install.packages("tidyr")
+
+library(readxl)
+library(spdep)
+library(ggplot2)
+library(splm)
+library(dplyr) 
+library(plm)
+library(spdep)
+library(rgdal)
+library(tidyr)
+
+## Read in the data 
+
+hydro<-read_excel("X:/Projects/2N Software/Science/2N Journal Papers/Urban Greeness Tracking/Hydro Metrics Data/hydro.xlsx")
+
+head(hydro)
+
+```
+
+
+## Generate spatial weights matrix
+```{r}
+# Drainage coordinates
+
+coordsdist<-hydro %>% distinct(Lat, Long, BasinID)
+coordsID<-cbind(coordsdist$BasinID)
+coords<-cbind(coordsdist$Lat, coordsdist$Long)
+
+# Find k nearest neighbors for k= 1
+
+knn1 <- knearneigh(coords)
+str(knn1)
+
+# convert to nb
+
+k1 <- knn2nb(knn1)
+
+# Calculate critical threshold
+
+critical.threshold <- max(unlist(nbdists(k1,coords)))
+critical.threshold
+
+nb.dist.band<- dnearneigh(coords, 0, row.names = coordsID$BasinID, critical.threshold)
+summary(nb.dist.band)
+
+# Get the cardinally for each observation - neighbors for each observation
+
+dist.band.card <- card(nb.dist.band)
+dist.band.card
+
+# Plot the histogram of number of neighbors given the critical distance
+neighbors<-ggplot() +
+  geom_histogram(aes(x=dist.band.card)) +
+  xlab("Number of Neighbors")
+neighbors
+
+# Plot the locations of the neighbors
+nlocations<-plot(nb.dist.band, coords, lwd=.01, col="blue", cex = 0.5)
+nlocations
+
+# create the spatial weights matrix for the neighbors, row standardized
+# use this for the panel model
+
+listw<-nb2listw(nb.dist.band, style = "W")
+listw
+str(listw)
+
+```
+
+
+## Test for spatial autocorrelation across drainages
+
+
+```{r}
+# Group Q variables by basins
+Qbasins<- group_by(hydro, BasinID) %>% summarize(Q = mean(Q))
+q<-Qbasins$Q
+Qv<-as.vector(q)
+
+# Examine Basins Q Moran's I plot + test for spatial autocorrelation
+moran.plot(Qv,listw)
+moran.test(Qv, listw)
+
+
+```
+
+Conclusion = significant spatial autocorrelation = include spatial lag term in the panel regresison model
+
+## Build spatial panel models
+
+
+```{r}
+
+
+
+# Balance the panel using tidyr
+allrows <-hydro %>% expand(BasinID, wat_yr)
+
+
+# Check dimensionality with and without NAs
+
+dim(allrows)
+dim(hydro)
+
+hydro.b
+
+# construct a simple model with the panel data - will not estimate due to unbalanced panel
+
+
+hm1<- Qb ~  PPT
+
+spm1<-spml(hm1, data = hydro.b, listw = listw2mat(listw), model = "random", lag = FALSE)
+summary(spm1)
+
+
+
+
+
+## Examples
+
+## random effects panel with spatial lag and serial error correlation
+## optimization method set to "BFGS"
+sarsrmod <- spreml(fm, data = Produc, w = usaww, errors="sr", lag=TRUE,
+method="BFGS")
+summary(sarsrmod)
+
+
+
+data(Produc, package = "plm")
+data(usaww)
+fm <- log(gsp) ~ log(pcap) + log(pc) + log(emp) + unemp
+## the two standard specifications (SEM and SAR) one with FE
+## and the other with RE:
+## fixed effects panel with spatial errors
+fespaterr <- spml(fm, data = Produc, listw = mat2listw(usaww),
+model="within", spatial.error="b", Hess = FALSE)
+summary(fespaterr)
+## random effects panel with spatial lag
+respatlag <- spml(fm, data = Produc, listw = mat2listw(usaww),
+model="random", spatial.error="none", lag=TRUE)
+summary(respatlag)
+## calculate impact measures
+impac1 <- impacts(respatlag, listw = mat2listw(usaww, style = "W"), time = 17)
+summary(impac1, zstats=TRUE, short=TRUE)
+
+```
+
+## Including Plots
+
+
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
