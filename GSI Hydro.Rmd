@@ -1,0 +1,401 @@
+---
+title: "GSI Hydro"
+output: html_document
+---
+
+```{r}
+library(readxl)
+library(spdep)
+library(ggplot2)
+library(splm)
+library(dplyr) 
+library(plm)
+library(spdep)
+library(rgdal)
+library(tidyr)
+library(spatialreg)
+library(margins)
+library(modelr)
+```
+
+```{r}
+## Read in the data 
+
+hydro<-read_excel("X:/Projects/2N Software/Science/2N Journal Papers/Urban Greeness Tracking/Hydro Metrics Data/hydro.xlsx", na = "NA")
+is.numeric(hydro$g_bmps_DA)
+summary(hydro$g_bmps_DA)
+head(hydro)
+
+```
+
+## Balance the panel by inpuning missing rows for the full dataset = 372 basins
+```{r}
+
+library(tidyr)
+# Balance the panel using tidyr
+allrows <-hydro %>% tidyr::expand(BasinID, wat_yr)
+# Check dimensionality for new rows added
+
+dim(allrows)
+dim(hydro)
+
+# join back to hydro data
+hydro.b<-hydro %>% dplyr::right_join (allrows)
+hydro.b
+dim(hydro.b)
+dim(hydro)
+
+is.pbalanced(hydro.b)
+```
+## Panel models for percent drainage area coverage h_bmps
+```{r}
+#make sure all columns are numeric other than BasinID
+hydro.b[-1] <- lapply(hydro.b[-1], as.numeric)
+
+# Run panel models
+# Data already oriented for plm panel analysis, but index columns included anyway
+
+Q<-Q ~ PPT + Temp + Area_km2 + urban_imp_perc + NDVI_urban + h_bmps_DA_perc 
+Qratio.p.full<-plm(Q, data = hydro.b, model = "within", index = c("BasinID", "wat_yr"))
+summary(Q.p.full)
+
+Qb<- Qb ~  PPT + PET + Temp + Area_km2 + urban_imp_perc + NDVI_urban + h_bmps_DA_perc
+Qb.p.full<-plm(Qb, data = hydro.b, model = "within", index = c("BasinID", "wat_yr"))
+summary(Qb.p.full)
+
+Qcv<- Qcv ~  PPT + PET + Temp + Area_km2 + urban_imp_perc + NDVI_urban +  h_bmps_DA_perc
+Qcv.p.full<-plm(Qcv, data = hydro.b, model = "within", index = c("BasinID", "wat_yr"))
+summary(Qcv.p.full)
+
+Qhi<- Qhi ~  PPT + PET + Temp + Area_km2 + urban_imp_perc + NDVI_urban  +  h_bmps_DA_perc
+Qhi.p.full<-plm(Qhi, data = hydro.b, model = "within", index = c("BasinID", "wat_yr"))
+summary(Qhi.p.full)
+
+QhiDays<- QhiDays ~ PPT + PET + Temp + Area_km2 + basin_imp_perc + NDVI_urban + h_bmps_DA_perc
+QhiDays.p.full<-plm(QhiDays, data = hydro.b, model = "within", index = c("BasinID", "wat_yr"))
+summary(QhiDays.p.full)
+
+Qpeak<- Qpeak ~  PPT + PET + Temp + Area_km2 + urban_imp_perc + NDVI_urban + h_bmps_DA_perc
+Qpeak.p.full<-plm(Qpeak, data = hydro.b, model = "within", index = c("BasinID", "wat_yr"))
+summary(Qpeak.p.full)
+
+QpeakDur<- QpeakDur ~  PPT + PET + Temp + Area_km2 + urban_imp_perc + NDVI_urban + h_bmps_DA_perc
+QpeakDur.p.full<-plm(QpeakDur, data = hydro.b, model = "within", index = c("BasinID", "wat_yr"))
+summary(QpeakDur.p.full)
+
+QpeakRatio<- QpeakRatio ~  PPT + PET + Temp + Area_km2 + urban_imp_perc + NDVI_urban + h_bmps_DA_perc
+QpeakRatio.p.full<-plm(QpeakRatio, data = hydro.b, model = "within", index = c("BasinID", "wat_yr"))
+summary(QpeakRatio.p.full)
+
+```
+Results are all over the map with the drainage area estimates as the independent variables
+
+## Panel models for count density based coverage h_bmps
+```{r}
+#make sure all columns are numeric other than BasinID
+hydro.b[-1] <- lapply(hydro.b[-1], as.numeric)
+
+# Run panel models
+# Data already oriented for plm panel analysis, but index columns included anyway
+
+Q<- Q ~ PPT + Temp + Area_km2 +  urban_imp_perc + NDVI_urban + h_bmps_std
+Q.p.full<-plm(Q, data = hydro.b, model = "within", index = c("BasinID", "wat_yr"))
+summary(Q.p.full)
+
+Qb<- Qb ~  PPT + PET + Temp + Area_km2  + urban_imp_perc + NDVI_urban + h_bmps_std
+Qb.p.full<-plm(Qb, data = hydro.b, model = "within", index = c("BasinID", "wat_yr"))
+summary(Qb.p.full)
+
+Qcv<- Qcv ~  PPT + PET + Temp + Area_km2  + urban_imp_perc + NDVI_urban +  h_bmps_std
+Qcv.p.full<-plm(Qcv, data = hydro.b, model = "within", index = c("BasinID", "wat_yr"))
+summary(Qcv.p.full)
+
+Qhi<- Qhi ~  PPT + PET + Temp + Area_km2  + urban_imp_perc + NDVI_urban  +  h_bmps_std
+Qhi.p.full<-plm(Qhi, data = hydro.b, model = "within", index = c("BasinID", "wat_yr"))
+summary(Qhi.p.full)
+
+QhiDays<- QhiDays ~ PPT + PET + Temp + Area_km2  + basin_imp_perc + NDVI_urban + h_bmps_std
+QhiDays.p.full<-plm(QhiDays, data = hydro.b, model = "within", index = c("BasinID", "wat_yr"))
+summary(QhiDays.p.full)
+
+Qpeak<- Qpeak ~  PPT + PET + Temp + Area_km2  + urban_imp_perc + NDVI_urban + h_bmps_std
+Qpeak.p.full<-plm(Qpeak, data = hydro.b, model = "within", index = c("BasinID", "wat_yr"))
+summary(Qpeak.p.full)
+
+QpeakDur<- QpeakDur ~  PPT + PET + Temp + Area_km2 + urban_imp_perc + NDVI_urban + h_bmps_std
+QpeakDur.p.full<-plm(QpeakDur, data = hydro.b, model = "within", index = c("BasinID", "wat_yr"))
+summary(QpeakDur.p.full)
+
+QpeakRatio<- QpeakRatio ~  PPT + PET + Temp + Urban_area_km2 + urban_imp_perc + NDVI_urban + h_bmps_std
+QpeakRatio.p.full<-plm(QpeakRatio, data = hydro.b, model = "within", index = c("BasinID", "wat_yr"))
+summary(QpeakRatio.p.full)
+
+```
+Count based metrics only show a a small influence for QpeakRatio sig at 0.05 levek. 
+We know that there is substantial uncertainty in the implementation time estimates.
+May be better to only look at spatial patterns for this component - time static models below.
+
+## Extract the model elements to store in data frames
+```{r}
+library(broom)
+models<-list(Qratio = Qratio.p.full, Qb = Qb.p.full, Qcv = Qcv.p.full, Qhi = Qhi.p.full, QhiDays = QhiDays.p.full, Qpeak = Qpeak.p.full, QpeakDur = QpeakDur.p.full, QpeakRatio = QpeakRatio.p.full)
+GSImodels<-purrr::map_df(models, broom::tidy, .id = "model")
+write.csv(GSImodels, file = "GSImodels.csv")
+
+GSImodels.P<-purrr::map_df(models, broom::glance, .id = "model")
+write.csv(GSImodels.P, file = "GSImodels.P.csv")
+glance(Qratio.p.full, statistic, r.squared, p.value, adj.r.squared)
+```
+
+```{r}
+## Read in the data 
+
+GSI<-read_excel("X:/Projects/2N Software/Science/2N Journal Papers/Urban Greeness Tracking/Hydro Metrics Data/GSI.2019.xlsx", na = "NA")
+is.numeric(GSI$g_bmps_DA)
+head(GSI)
+
+```
+Try just building linear models with only the 2019 data
+
+## Panel models for count density based coverage h_bmps
+```{r}
+#make sure all columns are numeric other than BasinID
+GSI[-1] <- lapply(GSI[-1], as.numeric)
+
+# Run panel models
+# Data already oriented for plm panel analysis, but index columns included anyway
+
+Q.GSI<- lm(formula = Q ~ PPT + Temp + Area_km2 + urban_imp_perc + NDVI_urban + h_bmps_std, data = GSI.2019)
+summary(Q.GSI)
+
+Qb.GSI<- lm(formula = Qb ~  PPT + PET + Temp + Area_km2 + urban_imp_perc + NDVI_urban + h_bmps_std, data = GSI.2019)
+summary(Qb.GSI)
+
+Qcv.GSI<- lm(formula = Qcv ~  PPT + PET + Temp + Area_km2 + urban_imp_perc + NDVI_urban + h_bmps_std, data = GSI.2019)
+summary(Qcv.GSI)
+
+Qhi.GSI<- lm(formula = Qhi ~  PPT + PET + Temp + Area_km2 + urban_imp_perc + NDVI_urban + h_bmps_std, data = GSI.2019)
+summary(Qhi.GSI)
+
+QhiDays.GSI<- lm(formula = QhiDays ~  PPT + PET + Temp + Area_km2 + urban_imp_perc + NDVI_urban + h_bmps_std, data = GSI.2019)
+summary(QhiDays.GSI)
+
+Qpeak.GSI<- lm(formula = Qpeak ~  PPT + PET + Temp + Area_km2 + urban_imp_perc + NDVI_urban + h_bmps_std, data = GSI.2019)
+summary(Qpeak.GSI)
+
+QpeakDur.GSI<- lm(formula = QpeakDur ~  PPT + PET + Temp + Area_km2 + urban_imp_perc + NDVI_urban + h_bmps_std, data = GSI.2019)
+summary(QpeakDur.GSI)
+
+QpeakDur.GSI<- lm(formula = QpeakDur ~  PPT + PET + Temp + Area_km2 + urban_imp_perc + NDVI_urban + h_bmps_std, data = GSI.2019)
+summary(QpeakDur.GSI)
+
+QpeakRatio.GSI<- lm(formula = QpeakRatio ~  PPT + PET + Temp + Area_km2 + urban_imp_perc + NDVI_urban + h_bmps_std, data = GSI.2019)
+summary(QpeakRatio.GSI)
+
+```
+Conclusion - no significant effects for BMP implementation levels
+Other ideas are:
+
+Filter for basins with 75% of implementation data
+Filter for small basins only
+
+
+```{r}
+## Read in the data 
+
+GSI.75<-read_excel("X:/Projects/2N Software/Science/2N Journal Papers/Urban Greeness Tracking/Hydro Metrics Data/GSI.75.xlsx", na = "NA")
+is.numeric(GSI$g_bmps_DA)
+head(GSI)
+
+```
+
+Panel models for count density based coverage h_bmps using implementation datas > 75%
+```{r}
+#make sure all columns are numeric other than BasinID
+GSI.75[-1] <- lapply(GSI.75[-1], as.numeric)
+is.numeric(GSI.75$h_bmps_std)
+
+# Run panel models
+# Data already oriented for plm panel analysis, but index columns included anyway
+
+Q<- Q ~  PPT + Temp + Area_km2 + urban_imp_perc + NDVI_urban + h_bmps_std 
+Qratio.p.full<-plm(Q, data = GSI.75, model = "within", index = c("BasinID", "wat_yr"))
+summary(Qratio.p.full)
+
+Qb<- Qb ~  PPT + PET + Temp + Area_km2 + urban_imp_perc + NDVI_urban + h_bmps_std
+Qb.p.full<-plm(Qb, data = GSI.75, model = "within", index = c("BasinID", "wat_yr"))
+summary(Qb.p.full)
+
+Qcv<- Qcv ~  PPT + PET + Temp + Area_km2 + urban_imp_perc + NDVI_urban +  h_bmps_std
+Qcv.p.full<-plm(Qcv, data = GSI.75, model = "within", index = c("BasinID", "wat_yr"))
+summary(Qcv.p.full)
+
+Qhi<- Qhi ~  PPT + PET + Temp + Area_km2 + urban_imp_perc + NDVI_urban  +  h_bmps_std
+Qhi.p.full<-plm(Qhi, data = GSI.75, model = "within", index = c("BasinID", "wat_yr"))
+summary(Qhi.p.full)
+
+QhiDays<- QhiDays ~ PPT + PET + Temp + Area_km2 + basin_imp_perc + NDVI_urban + h_bmps_std
+QhiDays.p.full<-plm(QhiDays, data = GSI.75, model = "within", index = c("BasinID", "wat_yr"))
+summary(QhiDays.p.full)
+
+Qpeak<- Qpeak ~  PPT + PET + Temp + Area_km2 + urban_imp_perc + NDVI_urban + h_bmps_std
+Qpeak.p.full<-plm(Qpeak, data = GSI.75, model = "within", index = c("BasinID", "wat_yr"))
+summary(Qpeak.p.full)
+
+QpeakDur<- QpeakDur ~  PPT + PET + Temp + Area_km2 + urban_imp_perc + NDVI_urban + h_bmps_std
+QpeakDur.p.full<-plm(QpeakDur, data = GSI.75, model = "within", index = c("BasinID", "wat_yr"))
+summary(QpeakDur.p.full)
+
+QpeakRatio<- QpeakRatio ~  PPT + PET + Temp + Area_km2 + urban_imp_perc + NDVI_urban + h_bmps_std
+QpeakRatio.p.full<-plm(QpeakRatio, data = GSI.75, model = "within", index = c("BasinID", "wat_yr"))
+summary(QpeakRatio.p.full)
+
+```
+Conclusion - one significant effect in QpeakRatio at 0.05 level. 
+Preferable to use full dataset
+
+## Panel models results for Greeness + GSI using full dataset
+```{r}
+#make sure all columns are numeric other than BasinID
+hydro.b[-1] <- lapply(hydro.b[-1], as.numeric)
+
+# Run panel models
+# Data already oriented for plm panel analysis, but index columns included anyway
+
+NDVIurban<- NDVI_urban ~  PPT + Temp + + urban_imp_perc + g_bmps_std
+NDVIurban<-plm(NDVIurban, data = hydro.b, model = "within", index = c("BasinID", "wat_yr"))
+summary(NDVIurban.p.full)
+
+NDVIurbanI<- NDVI_urban ~  PPT + Temp + urban_imp_perc + g_bmps_std + urban_imp_perc * g_bmps_std 
+NDVIurban.I<-plm(NDVIurban, data = hydro.b, model = "within", index = c("BasinID", "wat_yr"))
+summary(NDVIurban.p.full)
+
+gbmps<- h_bmps_std ~  urban_imp_perc
+gbmps.u<-plm(gbmps, data = hydro.b, model = "within", index = c("BasinID", "wat_yr"))
+summary(gbmps.u)
+
+# plots
+gbmp<- ggplot(data = hydro.b, aes(x=urban_imp_perc, y=g_bmps_std, na.rm = TRUE))+ geom_point(size = 2, shape = 1) + scale_y_log10()
+gbmp 
+
+
+```
+Conclusions - GSI implementation has a measurable effect on urban greenness. 
+Interaction term between urban footprint expansion and the bmp implementation is not significant
+
+```{r}
+## Get residuals out of plm model object. Since the panel has rows for missing data and is structured in the same way that plm organizes the data this works to add residuals back to the data frame while keeping them in the right order (https://stackoverflow.com/questions/25127840/r-plm-extract-residuals-by-index)
+
+head(attr(residuals(NDVIurban), "index") )
+
+add_residuals(hydro.b, NDVIurbanR, var = "resid")
+
+res <- residuals(NDVIurbanR)
+r <- cbind(as.vector(res), attr(res, "index"))
+names(r) <- c("resid", "BasinID", "wat_yr")
+str(r)
+
+```
+
+
+## Panel models for Greeness + GSI using data with GSI dates > 75%
+```{r}
+#make sure all columns are numeric other than BasinID
+hydro.b[-1] <- lapply(hydro.b[-1], as.numeric)
+
+# Run panel models
+# Data already oriented for plm panel analysis, but index columns included anyway
+
+NDVIurban<- NDVI_urban ~  PPT + Temp + + urban_imp_perc + g_bmps_std
+NDVIurban.p.full<-plm(NDVIurban, data = GSI, model = "within", index = c("BasinID", "wat_yr"))
+summary(NDVIurban.p.full)
+
+NDVIurbanI<- NDVI_urban ~  PPT + Temp + urban_imp_perc + g_bmps_std + urban_imp_perc * g_bmps_std 
+NDVIurban.p.full<-plm(NDVIurban, data = GSI, model = "within", index = c("BasinID", "wat_yr"))
+summary(NDVIurban.p.full)
+```
+
+
+## Extract the model elements to store in data frames
+```{r}
+library(broom)
+
+models<-list(NDVIurban = NDVIurban.p.full, NDVIurban = NDVIurban.p.full_I)
+greenmodels<-purrr::map_df(models, broom::tidy, .id = "model")
+write.csv(greenmodels, file = "greenmodels.csv")
+
+greenmodels.P<-purrr::map_df(models, broom::glance, .id = "model")
+write.csv(greenmodels.P, file = "greenmodels.P.csv")
+glance(Qratio.p.full, statistic, r.squared, p.value, adj.r.squared)
+
+```
+
+## Generate spatial weights matrix to test spatial autocorrelation in residuals for the GSI dataset
+```{r}
+# Drainage coordinates
+
+coordslist<-GSI %>% distinct(Lat, Long, BasinID, g_bmps_DA_perc)
+coordsID<-cbind(coordslist$BasinID)
+coords<-cbind(coordsdist$Lat, coordslist$Long)
+
+coordsID.df<-as.data.frame(coordsID)
+
+# Find k nearest neighbors for k= 1
+knn1 <- knearneigh(coords)
+str(knn1)
+
+# convert to nb
+k1 <- knn2nb(knn1)
+
+# Calculate critical threshold
+
+critical.threshold <- max(unlist(nbdists(k1,coords)))
+critical.threshold
+
+nb.dist.band<- dnearneigh(coords, 0, row.names = coordsID.df$BasinID, critical.threshold)
+summary(nb.dist.band)
+
+# Get the cardinally for each observation - neighbors for each observation
+
+dist.band.card <- card(nb.dist.band)
+dist.band.card
+
+# Plot the histogram of number of neighbors given the critical distance
+neighbors<-ggplot() +
+  geom_histogram(aes(x=dist.band.card)) +
+  xlab("Number of Neighbors")
+neighbors
+
+# Plot the locations of the neighbors
+nlocations<-plot(nb.dist.band, coords, lwd=.01, col="blue", cex = 0.5)
+nlocations
+
+# create the spatial weights matrix for the neighbors, row standardized
+# use this for the panel model
+
+listw.GSI<-nb2listw(nb.dist.band, style = "W")
+listw.GSI
+str(listw.GSI)
+
+## Test for spatial correlation in the model residuals
+```
+
+
+```{r}
+## Get residuals out of plm model object. Since the panel has rows for missing data and is structured in the same way that plm organizes the data this works to add residuals back to the data frame while keeping them in the right order (https://stackoverflow.com/questions/25127840/r-plm-extract-residuals-by-index)
+
+head(attr(residuals(Qratio.p.full), "index") )
+
+res <- residuals(Qratio.p.full)
+r <- cbind(as.vector(res), attr(res, "index"))
+names(r) <- c("resid", "BasinID", "wat_yr")
+str(r)
+
+# Take mean of residuals
+GSI.r<-group_by(r, BasinID) %>% summarize(resid = mean(resid))
+
+# Apply Moran's I test to residuals
+moran.test(x = hydro.r$resid, listw=listw.GSI)
+moran.plot(x = hydro.r$resid, listw=listw.GSI)
+
+```

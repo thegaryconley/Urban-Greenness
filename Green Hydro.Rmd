@@ -3,8 +3,8 @@ title: "Green Hydro"
 output: html_document
 ---
 
-```{r setup, include=FALSE}
-
+## Install required packages
+```{r}
 # Install packages
 install.packages("readxl")
 install.packages("spdep")
@@ -15,6 +15,10 @@ install.packages("plm")
 install.packages("spdep")
 install.packages("rgdal")
 install.packages("tidyr")
+install.packages("spatialreg")
+install.packages("margins")
+install.packages("modelr")
+install.packages("broom")
 
 library(readxl)
 library(spdep)
@@ -25,23 +29,50 @@ library(plm)
 library(spdep)
 library(rgdal)
 library(tidyr)
+library(spatialreg)
+library(margins)
+library(modelr)
+```
 
+```{r}
 ## Read in the data 
 
-hydro<-read_excel("X:/Projects/2N Software/Science/2N Journal Papers/Urban Greeness Tracking/Hydro Metrics Data/hydro.xlsx")
+hydro<-read_excel("X:/Projects/2N Software/Science/2N Journal Papers/Urban Greeness Tracking/Hydro Metrics Data/hydro.xlsx", na = "NA")
 
 head(hydro)
 
 ```
+## Balance the panel by inpuning missing rows for the full dataset = 372 basins
+```{r}
+
+library(tidyr)
+# Balance the panel using tidyr
+allrows <-hydro %>% tidyr::expand(BasinID, wat_yr)
+# Check dimensionality for new rows added
+
+dim(allrows)
+dim(hydro)
+
+# join back to hydro data
+hydro.b<-hydro %>% dplyr::right_join (allrows)
+hydro.b
+dim(hydro.b)
+dim(hydro)
+
+is.pbalanced(hydro.b)
 
 
-## Generate spatial weights matrix
+```
+
+## Generate spatial weights matrix for the full dataset = 372 basins
 ```{r}
 # Drainage coordinates
 
 coordsdist<-hydro %>% distinct(Lat, Long, BasinID)
 coordsID<-cbind(coordsdist$BasinID)
 coords<-cbind(coordsdist$Lat, coordsdist$Long)
+
+coordsID.df<-as.data.frame(coordsID)
 
 # Find k nearest neighbors for k= 1
 
@@ -52,12 +83,13 @@ str(knn1)
 
 k1 <- knn2nb(knn1)
 
+
 # Calculate critical threshold
 
 critical.threshold <- max(unlist(nbdists(k1,coords)))
 critical.threshold
 
-nb.dist.band<- dnearneigh(coords, 0, row.names = coordsID$BasinID, critical.threshold)
+nb.dist.band<- dnearneigh(coords, 0, row.names = coordsID.df$BasinID, critical.threshold)
 summary(nb.dist.band)
 
 # Get the cardinally for each observation - neighbors for each observation
@@ -82,6 +114,9 @@ listw<-nb2listw(nb.dist.band, style = "W")
 listw
 str(listw)
 
+# matrix version of the weights
+matw<-listw2mat(listw)
+str(matw)
 ```
 
 
@@ -89,8 +124,8 @@ str(listw)
 
 
 ```{r}
-# Group Q variables by basins
-Qbasins<- group_by(hydro, BasinID) %>% summarize(Q = mean(Q))
+# Group Q  by basins
+Qbasins<- group_by(hydro, BasinID) %>% summarize(Q = mean(Qratio))
 q<-Qbasins$Q
 Qv<-as.vector(q)
 
@@ -103,70 +138,398 @@ moran.test(Qv, listw)
 
 Conclusion = significant spatial autocorrelation = include spatial lag term in the panel regresison model
 
+Conclusion. Spatial panel model cannot be estimated with an unbalanced panel even with missing rows impuned 
+Subset the data for basins that include all years = 181 basins to run spatial panel models
+
+## Filter for basins with no missing years
+```{r}
+# Filter for basins with no missing data
+
+hydro.small<-hydro %>% 
+  group_by(BasinID) %>%
+  filter(n () >34)
+
+## count unique basins + years, 
+basin<-as.data.frame(hydro.small %>% group_by(BasinID) %>% count)
+year<-as.data.frame(hydro.small %>% group_by(wat_yr) %>% count)
+
+```
+
+# Test for random vs fixed effects model
+```{r}
+#To decide between fixed or random effects you can run a Hausman test where the null hypothesis is that the preferred model is random effects vs. the alternative the fixed effects (see Green, 2008, chapter 9)
+
+phtest(Qratio.r, Qratio.f)
+Hausman Test
+```
+
+Output:
+data:  Qratio
+chisq = 33.377, df = 5, p-value = 3.167e-06
+alternative hypothesis: one model is inconsistent
+Conclusion - use random effects model
+
+
+## Build a new spatial weights matrix from the small dataset = 181 basins
+```{r}
+# Drainage coordinates
+
+coordsdist<-hydro.small%>% distinct(Lat, Long, BasinID)
+coordsID<-cbind(coordsdist$BasinID)
+coords<-cbind(coordsdist$Lat, coordsdist$Long)
+
+coordsID.df<-as.data.frame(coordsID)
+
+# Find k nearest neighbors for k= 1
+
+knn1 <- knearneigh(coords)
+str(knn1)
+
+# convert to nb
+
+k1 <- knn2nb(knn1)
+
+# Calculate critical threshold
+
+critical.threshold <- max(unlist(nbdists(k1,coords)))
+critical.threshold
+
+nb.dist.band<- dnearneigh(coords, 0, row.names = coordsID.df$BasinID, critical.threshold)
+summary(nb.dist.band)
+
+# Get the cardinally for each observation - neighbors for each observation
+
+dist.band.card <- card(nb.dist.band)
+dist.band.card
+
+# Plot the histogram of number of neighbors given the critical distance
+neighbors<-ggplot() +
+  geom_histogram(aes(x=dist.band.card)) +
+  xlab("Number of Neighbors")
+neighbors
+
+# Plot the locations of the neighbors
+nlocations<-plot(nb.dist.band, coords, lwd=.01, col="blue", cex = 0.5)
+nlocations
+
+# create the spatial weights matrix for the neighbors, row standardized
+# use this for the panel model
+
+listw.small<-nb2listw(nb.dist.band, style = "W")
+listw.small
+str(listw.small)
+
+# matrix version of the weights
+matw<-listw2mat(listw)
+str(matw)
+
+```
+
+## Test for spatial autocorrelation across drainages in the small dataset = 181 basins
+```{r}
+# Group Q variables by basins
+Qbasins<- group_by(hydro.small, BasinID) %>% summarize(Q = mean(Q))
+q<-Qbasins$Q
+Q<-as.vector(q)
+
+Qbasins<- group_by(hydro.small, BasinID) %>% summarize(Qratio= mean(Qratio))
+q<-Qbasins$Qratio
+Qratio<-as.vector(q)
+
+Qbasins<- group_by(hydro.small, BasinID) %>% summarize(Qcv= mean(Qcv))
+q<-Qbasins$Qcv
+Qcv<-as.vector(q)
+
+Qbasins<- group_by(hydro.small, BasinID) %>% summarize(Qb= mean(Qb))
+q<-Qbasins$Qb
+Qb<-as.vector(q)
+
+Qbasins<- group_by(hydro.small, BasinID) %>% summarize(Qpeak= mean(Qpeak))
+q<-Qbasins$Qpeak
+Qpeak<-as.vector(q)
+
+Qbasins<- group_by(hydro.small, BasinID) %>% summarize(QpeakFreq= mean(QpeakFreq))
+q<-Qbasins$QpeakFreq
+QpeakFreq<-as.vector(q)
+
+# Examine Basins Q Moran's I plot + test for spatial autocorrelation
+moran.plot(Q,listw)
+moran.plot(Qratio,listw)
+moran.plot(Qcv,listw)
+moran.plot(Qb,listw)
+moran.plot(Qpeak,listw)
+moran.plot(QpeakFreq,listw)
+
+moran.test(Q, listw)
+moran.test(Qratio,listw)
+moran.test(Qcv,listw)
+moran.test(Qb,listw)
+moran.test(Qpeak,listw)
+moran.test(QpeakFreq,listw)
+
+```
+Conclusion - Significant spatial autocorrelation in the dependent flow variables
+
+
+## Build spatial panel model for small dataset = 181 basins
+```{r}
+# Balance the panel using tidyr
+allrows <-hydro.small %>% expand (BasinID, wat_yr)
+dim(allrows)
+dim(hydro.small)
+# Tidy expand is not creating new rows for missing year/Basin combinations!
+# Instead try to create a df with all possible basin + year combinations
+
+basinyear<- as.data.frame(tidyr::crossing(basin$BasinID,year$wat_yr))
+
+names(basinyear)[1] <- "BasinID"
+names(basinyear)[2] <- "wat_yr"
+
+# Check dimensionality for new rows added
+dim(hydro.small)
+dim(basinyear)
+
+# join expanded data back to hydro data
+hydro.b.small<-hydro.small %>% dplyr::right_join (basinyear)
+hydro.b.small
+dim(hydro.b.small)
+
+is.pbalanced(hydro.b.small)
+```
+
+
+Spatial panel models for small dataset = 181 basins
+Some factors don't vary across time and also the hausman test shows a significant difference between fixed and random effects, so we specify random effects
+
 ## Build spatial panel models
+```{r}
+pdata.frame(hydro.b.small)
+
+Qratio<- Qratio ~  PPT + PET + Temp + Area_km2 + urban_imp_perc + NDVI_urban
+Qratio.s<-spml(Qratio, data = hydro.b.small, listw = listw.small, model = "within", index = NULL, spatial.error = "none", lag =TRUE)
+print(summary(Qratio.s))
+
+Qb<- Qb ~  PPT + PET + Temp + Area_km2 + urban_imp_perc + NDVI_urban
+Qb.s<-spml(Qb, data = hydro.b.small, listw = listw, model = "within", index = NULL, spatial.error = "none", lag = TRUE)
+print(summary(Qb.s))
+
+Qcv<- Qcv ~  PPT + PET + Temp + Area_km2 + urban_imp_perc + NDVI_urban
+Qcv.s<-spml(Qcv, data = hydro.b.small, listw = listw, model = "within", index = NULL, spatial.error = "none", lag = TRUE)
+print(summary(Qcv.s))
+
+# Unbalanced Panel
+#Qhi<- Qhi_g ~  PPT + PET + Temp + Area_km2 + urban_imp_perc + NDVI_urban
+#Qhi.s<-spml(Qhi, data = hydro.b.small, listw = listw, model = "within", index = NULL, spatial.error = "none", lag = TRUE)
+#print(summary(Qhi.s))
+
+QhiDays<- QhiDays_g ~  PPT + PET + Temp + Area_km2 + urban_imp_perc + NDVI_urban
+QhiDays.s<-spml(QhiDays, data = hydro.b.small, listw = listw, model = "within", index = NULL, spatial.error = "none", lag = TRUE)
+print(summary(QhiDays.s))
+
+# Unbalanced Panel
+#Qpeak<- Qpeak ~  PPT + PET + Temp + Area_km2 + urban_imp_perc + NDVI_urban
+#Qpeak.s<-spml(Qpeak, data = hydro.b.small, listw = listw, model = "within", index = NULL, spatial.error = "none", lag = TRUE)
+#print(summary(Qpeak.s))
+
+#Unbalanced Panel
+#QpeakDur<- QpeakDur ~  PPT + PET + Temp + Area_km2 + urban_imp_perc + NDVI_urban
+#QpeakDur.s<-spml(QpeakDur, data = hydro.b.small, listw = listw, model = "within", index = NULL, spatial.error = "none", lag = TRUE)
+#print(summary(QpeakDur.s))
+
+QpeakFreq<- QpeakFreq ~  PPT + PET + Temp + Area_km2 + urban_imp_perc + NDVI_urban
+QpeakFreq.s<-spml(QpeakFreq, data = hydro.b.small, listw = listw, model = "within", index = NULL, spatial.error = "none", lag = TRUE)
+print(summary(QpeakFreq.s))
+
+# Unbalanced Panel
+#QpeakRatio<- QpeakRatio ~  PPT + PET + Temp + Area_km2 + urban_imp_perc + NDVI_urban
+#QpeakRatio.s<-spml(QpeakRatio, data = hydro.b.small, listw = listw, model = "within", index = NULL, spatial.error = "none", lag = TRUE)
+#print(summary(QpeakRatio.s))
+
+# Unbalanced Panel
+#QvolRatio<- QvolRatio_b ~  PPT + PET + Temp + Area_km2 + urban_imp_perc + NDVI_urban
+#QvolRatio.s<-spml(QvolRatio, data = hydro.b.small, listw = listw, model = "within", index = NULL, spatial.error = "none", lag = TRUE)
+#print(summary(QvolRatio.s))
+
+
+
+```
+
+# Test for autocorrelation accounting on small dataset = 181
+```{r}
+bsktest(x = Qratio, data = hydro.small, listw = listw.small, test = "LM1")
+```
+Conclusion - autocorrelation exists in the error terms. Addition of Lat + Long to the model for the small dataset does not eliminate it. 
+
+# Extract fitted values from models
+```{r}
+Qratio.s_Fit <-fitted.values(Qratio.s)
+write.csv(Qratio.s_Fit, file = "Qratio.s_Fit.csv")
+
+```
+
+## Run the nonspatial panel models on the small dataset and the small dataset = 181 basins 
+```{r}
+pdata.frame(hydro.b.small)
+#make sure all columns are numeric
+hydro.b.small[-1] <- lapply(hydro.b.small[-1], as.numeric)
+
+Qratio<- Qratio ~  PPT + Temp + Area_km2 + urban_imp_perc +  NDVI_urban
+Qratio.p<-plm(Qratio, data = hydro.b.small, model = "within")
+summary(Qratio.p)
+
+Qb<- Qb~  PPT + PET + Temp + Area_km2 + urban_imp_perc + NDVI_urban
+Qb.p<-plm(Qb, data = hydro.b.small, model = "within")
+summary(Qb.p)
+
+Qcv<- Qcv ~  PPT + PET + Temp + Area_km2 + urban_imp_perc + NDVI_urban
+Qcv.p<-plm(Qcv, data = hydro.b.small, model = "within")
+summary(Qcv.p)
+
+Qhi<- Qhi_g ~  PPT + PET + Temp + Area_km2 + urban_imp_perc + NDVI_urban
+Qhi.p<-plm(Qhi, data = hydro.b.small, model = "within")
+summary(Qhi.p)
+
+QhiDays<- QhiDays_g ~  PPT + PET + Temp + Area_km2 + basin_imp_perc + NDVI_urban
+QhiDays.p<-plm(QhiDays, data = hydro.b.small, model = "within")
+summary(QhiDays.p)
+
+Qpeak<- Qpeak~  PPT + PET + Temp + Area_km2 + urban_imp_perc + NDVI_urban
+Qpeak.p<-plm(Qpeak, data = hydro.b.small, model = "within")
+summary(Qpeak.p)
+
+QpeakDur<- QpeakDur ~  PPT + PET + Temp + Area_km2 + urban_imp_perc + NDVI_urban
+QpeakDur.p<-plm(QhiDays, data = hydro.b.small, model = "within")
+summary(QpeakDur.p)
+
+QpeakFreq<- QpeakFreq ~  PPT + PET + Temp + Area_km2 + urban_imp_perc + NDVI_urban
+QpeakFreq.p<-plm(QpeakFreq, data = hydro.b.small, model = "within")
+summary(QpeakFreq.p)
+
+QpeakRatio<- QpeakRatio ~  PPT + PET + Temp + Area_km2 + urban_imp_perc + NDVI_urban
+QpeakRatio.p<-plm(QpeakRatio, data = hydro.b.small, model = "within")
+summary(QpeakRatio.p)
+
+QvolRatio<- QvolRatio_b ~  PPT + PET + Temp + Area_km2 + urban_imp_perc + NDVI_urban
+QvolRatio.p<-plm(QvolRatio, data = hydro.b.small, model = "within")
+summary(QvolRatio.p)
+
+
+```
+Compare these outputs to the models that do include spatial effects
+
+
+**************************FINAL MODEL SET*******************************
+## Run the nonspatial panel models on the full dataset and the full dataset = 372 basins
+```{r}
+#make sure all columns are numeric other than BasinID
+hydro.b[-1] <- lapply(hydro.b[-1], as.numeric)
+
+# Run panel models
+# Data already oriented for plm panel analysis
+
+Q<- Q ~ PPT + PET + Temp + Area_km2 + urban_imp_perc + NDVI_urban
+Qratio.p.full<-plm(Q, data = hydro.b, model = "within", index = c("BasinID", "wat_yr"))
+summary(Q.p.full)
+
+Qb<- Qb ~  PPT + PET + Temp + Area_km2 + urban_imp_perc + NDVI_urban
+Qb.p.full<-plm(Qb, data = hydro.b, model = "within", index = c("BasinID", "wat_yr"))
+summary(Qb.p.full)
+
+Qcv<- Qcv ~  PPT + PET + Temp + Area_km2 + urban_imp_perc + NDVI_urban
+Qcv.p.full<-plm(Qcv, data = hydro.b, model = "within", index = c("BasinID", "wat_yr"))
+summary(Qcv.p.full)
+
+Qhi<- Qhi ~  PPT + PET + Temp + Area_km2 + urban_imp_perc + NDVI_urban
+Qhi.p.full<-plm(Qhi, data = hydro.b, model = "within", index = c("BasinID", "wat_yr"))
+summary(Qhi.p.full)
+
+QhiDays<- QhiDays ~  PPT + PET + Temp + Area_km2 + basin_imp_perc + NDVI_urban
+QhiDays.p.full<-plm(QhiDays, data = hydro.b, model = "within", index = c("BasinID", "wat_yr"))
+summary(QhiDays.p.full)
+
+Qpeak<- Qpeak ~  PPT + PET + Temp + Area_km2 + urban_imp_perc + NDVI_urban
+Qpeak.p.full<-plm(Qpeak, data = hydro.b, model = "within", index = c("BasinID", "wat_yr"))
+summary(Qpeak.p.full)
+
+QpeakDur<- QpeakDur ~  PPT + PET + Temp + Area_km2 + urban_imp_perc + NDVI_urban
+QpeakDur.p.full<-plm(QpeakDur, data = hydro.b, model = "within", index = c("BasinID", "wat_yr"))
+summary(QpeakDur.p.full)
+
+QpeakRatio<- QpeakRatio ~  PPT + PET + Temp + Area_km2 + urban_imp_perc + NDVI_urban
+QpeakRatio.p.full<-plm(QpeakRatio, data = hydro.b, model = "within", index = c("BasinID", "wat_yr"))
+summary(QpeakRatio.p.full)
+
+```
+
+## Extract the model elements to store in data frames
+```{r}
+library(broom)
+
+models<-list(Qratio = Qratio.p.full, Qb = Qb.p.full, Qcv = Qcv.p.full, Qhi = Qhi.p.full, QhiDays = QhiDays.p.full, Qpeak = Qpeak.p.full, QpeakDur = QpeakDur.p.full, QpeakRatio = QpeakRatio.p.full)
+hydromodels<-purrr::map_df(models, broom::tidy, .id = "model")
+write.csv(hydromodels, file = "hydromodels.csv")
+
+hydromodels.P<-purrr::map_df(models, broom::glance, .id = "model")
+write.csv(hydromodels.P, file = "hydromodels.P.csv")
+glance(Qratio.p.full, statistic, r.squared, p.value, adj.r.squared)
+
+```
+
+
+## Test for spatial correlation in the model residuals
+```{r}
+
+## Get residuals out of plm model object. Since the panel has rows for missing data and is structured in the same way that plm organizes the data this works to add residuals back to the data frame while keeping them in the right order (https://stackoverflow.com/questions/25127840/r-plm-extract-residuals-by-index)
+
+head(attr(residuals(Qcv.p.full), "index") )
+
+res <- residuals(QhiDays.p.full)
+r <- cbind(as.vector(res), attr(res, "index"))
+names(r) <- c("resid", "BasinID", "wat_yr")
+str(r)
+
+# Take mean of residuals
+hydro.r<-group_by(r, BasinID) %>% summarize(resid = mean(resid))
+
+# Apply Moran's I test to residuals
+moran.test(x = hydro.r$resid, listw=listw)
+moran.plot(x = hydro.r$resid, listw=listw)
+
+```
+
+Conclusion- no spatial autocorrelation in the residual means with this approach. This is testing for correlation of the in the model residuals rather than spatial errors using Lagrange Multiplier as in the tests run for the small dataset which uses the spatial weights matrix directly and the full panel dataset, not just the mean values per site. These two methods should be getting at the same problem, but from opposite ends - trying to model the autocorrelation vs measuring it in the residuals
+The error (or disturbance) of an observed value is the deviation of the observed value from the (unobservable) true value of a quantity of interest
+The residual of an observed value is the difference between the observed value and the estimated value of the quantity of interest
+Spatial autocorrelation in the residuals IS the problem since it violates the regression assumptions, whereas correlated error terms only indicates that correlation of residuals MAY occur.
+
+
+# Test for random vs fixed effects model
+```{r}
+#To decide between fixed or random effects you can run a Hausman test where the null hypothesis is that the preferred model is random effects vs. the alternative the fixed effects (see Green, 2008, chapter 9)
+
+phtest(Qratio.p.full, Qratio.p.full.fixed)
+Hausman Test
+
+```
+
+Conclusion = use fixed effects
+Hausman test indicates fixed effects are the preferred structure
+Also, we're not trying to extrapolate beyond the independent variable levels in these basins so fixed effects is preferred for better power.
+
+To decide between fixed or random effects you can run a Hausman test where the null hypothesis is that the preferred model is random effects vs. the alternative the fixed effects (see Green, 2008, chapter 9). It basically tests whether the unique errors (ui) are correlated with the regressors, the null hypothesis is they are not.
+Run a fixed effects model and save the estimates, then run a random model and save the estimates, then perform the test. If the p-value is significant (for example <0.05) then use fixed effects, if not use random effects.
 
 
 ```{r}
+# Calculate impacts of model coefficients
+# Margins will not estimate on the full datasets - probably due to different numbers of rows of fitted values for variables with missing values 
+# This is not necessary for the current model where the coefficients can be interpreted directly.
 
-
-
-# Balance the panel using tidyr
-allrows <-hydro %>% expand(BasinID, wat_yr)
-
-
-# Check dimensionality with and without NAs
-
-dim(allrows)
-dim(hydro)
-
-hydro.b
-
-# construct a simple model with the panel data - will not estimate due to unbalanced panel
-
-
-hm1<- Qb ~  PPT
-
-spm1<-spml(hm1, data = hydro.b, listw = listw2mat(listw), model = "random", lag = FALSE)
-summary(spm1)
-
-
-
-
-
-## Examples
-
-## random effects panel with spatial lag and serial error correlation
-## optimization method set to "BFGS"
-sarsrmod <- spreml(fm, data = Produc, w = usaww, errors="sr", lag=TRUE,
-method="BFGS")
-summary(sarsrmod)
-
-
-
-data(Produc, package = "plm")
-data(usaww)
-fm <- log(gsp) ~ log(pcap) + log(pc) + log(emp) + unemp
-## the two standard specifications (SEM and SAR) one with FE
-## and the other with RE:
-## fixed effects panel with spatial errors
-fespaterr <- spml(fm, data = Produc, listw = mat2listw(usaww),
-model="within", spatial.error="b", Hess = FALSE)
-summary(fespaterr)
-## random effects panel with spatial lag
-respatlag <- spml(fm, data = Produc, listw = mat2listw(usaww),
-model="random", spatial.error="none", lag=TRUE)
-summary(respatlag)
-## calculate impact measures
-impac1 <- impacts(respatlag, listw = mat2listw(usaww, style = "W"), time = 17)
-summary(impac1, zstats=TRUE, short=TRUE)
+margins(Qratio.p)
+summary(margins(Qratio.p))
 
 ```
 
-## Including Plots
 
 
-
-```{r pressure, echo=FALSE}
-plot(pressure)
-```
 

@@ -1,6 +1,7 @@
 ---
 title: "NDVI Trends"
 output: html_document
+keep_md: yes
 ---
 
 Analyis file fore runing trend tests on 614 watersheds to examine NDVI trends over time
@@ -9,26 +10,25 @@ Analyis file fore runing trend tests on 614 watersheds to examine NDVI trends ov
 ## Load packages
 
 ```{r}
+
+
+install.packages("spdep")
+install.packages("ggplot2")
+install.packages("readxl")
+install.packages("trend")
+install.packages("splm")
+install.packages("dplyr")
+install.packages("Rtools")
+
 library(spdep)
 library(ggplot2)
 library(readxl)
-library(ggplot2)
 library(trend)
 library(splm)
 library(dplyr) 
 ```
 
 
-## Example Code
-
-```{r}
-head(iris)
-```
-```{r}
-iris %>%
-   group_by(Species) %>%
-   do(data.frame(., resid = residuals(lm(Sepal.Length ~ Sepal.Width, data=.))))
-```
 
 ## Read in the data
 ```{r}
@@ -99,7 +99,6 @@ i
 
 Correspondence with P and I is moderate to strong in most drainages, moderate with T. Conclusion - include both P + T in NDVI regressions
 
-After performing trend tests on the rediduals, wondering if this correction is introducing additional error, particularly becuase we are applying it to all watersheds. If P + T don't have significant trends in time, perhaps we are better off using the raw NDVI
 
 ## Perform MK Trend tests on P + T 
 ```{r}
@@ -140,7 +139,6 @@ sigP<-ggplot(out, aes(x= p.value)) + geom_histogram() + xlim(0, 0.05) + ggtitle 
 sigP
 
 View(out)
-
 ```
 
 Conclusion - more than half of the watersheds show trends over time in either P or T. This would indicatte that the NDVI should be corrected for these factors.
@@ -160,15 +158,11 @@ h <-ggplot(NDVIr, aes(x = resid)) + geom_histogram()
 h
 ```
 
-
-
 ## Correlation plots for P + T residuals
-
 ```{r}
 s <-ggplot(NDVIr, aes(x = wat_yr, y = resid)) + geom_point()
 s
 ```
-
 
 ## Perform  MK Trend Tests + examine ouputs  P + T
 ```{r}
@@ -194,7 +188,6 @@ tau<-ggplot(out, aes(x= tau)) + geom_histogram() +  ggtitle ("P+T")
 tau
 
 ```
-
 
 # Put MK outputs back together with the sites data and extract significant trends P + T
 ```{r}
@@ -223,7 +216,6 @@ psigt
 
 ```
 
-
 ## Multivariate T+P+I NDVI Regressions + store residuals in same data frame
 ```{r}
 NDVIr2<-NDVI %>%
@@ -234,7 +226,6 @@ head(NDVIr2)
 ```
 
 ## Correlation plots for P + T residuals
-
 ```{r}
 s2 <-ggplot(NDVIr2, aes(x = wat_yr, y = resid2)) + geom_point()
 s2
@@ -309,9 +300,8 @@ psigt <-ggplot(msigt, aes(wat_yr,  resid2, group = Site_No_ID)) +
 psigt
 
 ```
-## Try the same trend tests on a shorter time period 1999-2019
 
-
+## Try the same trend tests on a shorter time period 1999-2019 for LM residuals P + T + I
 ```{r}
 NDVIsh<- NDVI%>% filter (wat_yr > 1999)
 summary(NDVIsh)
@@ -326,7 +316,7 @@ NDVIr3<-NDVIsh %>%
 NDVIr3
 ```
 
-## Perform  MK Trend Tests + examine ouputs 2000-2019
+## Perform  MK Trend Tests + examine ouputs 2000-2019 for LM corrected for P + T + I
 ```{r}
 NDVIr3.sites<-split(NDVIr3$resid3, forcats::fct_inorder(factor(NDVIr3$Site_No_ID)))
 
@@ -374,10 +364,9 @@ psigt <-ggplot(msigt, aes(wat_yr,  resid3, group = Site_No_ID)) +
 psigt
 ```
 
-Conclusion - fewer significant trends using the shorter time period. Positive trends Identified in two watersheds that were not identified in the longer time series
+Conclusion - fewer significant trends using the shorter time period, which mostly overlap with longer time period. Positive trends Identified in two watersheds that were not identified in the longer time series
 
-Perhaps we are introducing substantial error by using the regression residuals. Also try trend tests with no corrections for P + T with I as a partial correlation in the MK Test.
-
+Also try trend tests with no corrections for P + T with I as a partial correlation in the MK Test.
 
 
 ## Perform  MK Trend Tests + examine ouputs without correction for P + T 1985-2019
@@ -471,12 +460,11 @@ psigt
 
 ```
 
-Conclusions - no new trends are identified when omitting the P + T from the regression residuals, although the trend sloped changes slightly. Given that most sites have significant trends in time for either P or T, and most show moderate to strong association with NDVI , accounting for these variables seems warranted. 
+Conclusions - no new trends are identified when omitting the P + T from the regression residuals, although the trend sloped changed somewhat. Given that most sites have significant trends in time for either P or T, and most show moderate to strong association with NDVI , accounting for these variables seems warranted. 
 Try performing MK test on NDVI only corrected for I to see if results are any different
 
 
 ## Regression + store NDVI residuals for only P + I corrected residuals
-
 ```{r}
 NDVIr5<-NDVI %>%
    group_by(Site_No_ID) %>%
@@ -485,7 +473,6 @@ head(NDVIr5)
 ```
 
 ## Scatter plot for PPT + I corrected NDVI residuals
-
 ```{r}
 s <-ggplot(NDVIr5, aes(x = wat_yr, y = resid5)) + geom_point()
 s
@@ -539,10 +526,10 @@ psigt <-ggplot(msigt, aes(wat_yr,  resid5, group = Site_No_ID)) +
 psigt
 
 ```
-Conclusions - only 1 site level trend change happens with the exclusio of T as a covariate. Some error is likely introduced at some sites where T correlation is not strong.
+Conclusions - only 1 site level trend change happens with the exclusion of T as a covariate. Some error is likely introduced at some sites where T correlation is not strong.
 
 
-## Perform Partial MK Trend Tests for raw NDVI
+## Perform MK Trend Tests for raw NDVI
 ```{r}
 NDVI.sites<-split(NDVI$NDVI_urban, forcats::fct_inorder(factor(NDVI$Site_No_ID)))
 
@@ -577,9 +564,7 @@ sigAll<-ggplot() +
 sigAll
 ```
 
-
 ## Put MK outputs back together with the sites data and extract significant trends for the Raw NDVI
-
 ```{r}
 sites<-NDVI%>%
 select(Site_No_ID)
@@ -616,133 +601,119 @@ psigt +facet_wrap_paginate(~Site_No_ID, nrow = 3, ncol = 3, page = 6)
 psigt +facet_wrap_paginate(~Site_No_ID, nrow = 3, ncol = 3, page = 7)
 psigt +facet_wrap_paginate(~Site_No_ID, nrow = 3, ncol = 3, page = 8)
 
-
 ```
 
 Raw NDVI trend tests show 307 significant trends, but many of these seem to be due to precipiatation or temperature patterns, which also show trends over time in hundreds of these watersheds.
 
+************************FINAL OUTPUTS ANALYSIS****************************************
 ## Apply the Partial MK test on NDVI corrected for P + T. Partial out the I term during the MK test
-
-## Regression + store NDVI residuals for only P + I corrected residuals
-
+## Regression + store NDVI residuals for only P + T corrected residuals
 ```{r}
-NDVIr6<-NDVI%>%
+
+library(spdep)
+library(ggplot2)
+library(readxl)
+library(trend)
+library(splm)
+library(dplyr) 
+library(forcats)
+library(tidyr)
+library(reshape2)
+library(broom)
+library(purrr)
+
+NDVI<-read_excel("X:/Projects/2N Software/Science/2N Journal Papers/Urban Greeness Tracking/NDVI data/NDVI_apr8.xlsx")
+View(NDVI)
+
+# Several of the initial 614 basins are overlapping, when filtered by unique drainage, we have 372 watersheds.
+basins372<-read_excel("X:/Projects/2N Software/Science/2N Journal Papers/Urban Greeness Tracking/R Urban Greenness/basins372.xlsx")
+View(basins372)
+
+# Merge the two data frames on the BasinID field common to both frames only including data from the 372 basins
+NDVIu<- merge(NDVI, basins372)
+
+# Estimate a linear model and append residuals back to the data frame
+NDVIr6<-NDVIu%>%
    group_by(Site_No_ID) %>%
-   do(data.frame(., resid6 = residuals(lm(NDVI_urban ~ PPT, data=.))))
+   do(data.frame(., resid6 = residuals(lm(NDVI_urban ~ PPT + Temp, data=.))))
 head(NDVIr6)
+
 ```
 
 ## Scatter plot for P + T corrected NDVI residuals
-
 ```{r}
 s <-ggplot(NDVIr6, aes(x = wat_yr, y = resid6)) + geom_point()
 s
 ```
 
-## Perform Partial MK Trend Tests for only P + T corrected residuals, with I as covariate in trend test
+## Perform Partial MK Trend Tests for only P + T corrected residuals, with I as covariate in trend test 
 ```{r}
 # split into columns
 NDVIr6.sites<-split(NDVIr6$resid6, forcats::fct_inorder(factor(NDVIr6$Site_No_ID)))
 I.sites<-split(NDVIr6$urban_imp_perc, forcats::fct_inorder(factor(NDVIr6$Site_No_ID)))
 
-# change to numeric
+# change to residuals to matrix with BasinIDs as row headers
 r<-sapply(NDVIr6.sites, as.numeric)
 i<-sapply(I.sites, as.numeric)
 
+# Perform the partial Mann-Kendall test on all Basins
 pmkt<- mapply(partial.mk.test, as.data.frame(r),as.data.frame(i))
-
-library(reshape2)
-
 d<-as.data.frame(pmkt)
 df <- tibble::rownames_to_column(d, "VALUE")
 
+# Pivot the wide table to a long table
 dlong<-df%>%
     tidyr::pivot_longer(cols= starts_with("ID"), names_to="Site_No_ID", values_to = "result")
 View(dlong)
 
+#subset p.values
 pval<-subset(dlong, VALUE=="p.value")
+#coerce to data frame
 pdata<-as.data.frame(pval)
 
+# change values to numeric
 p.value<-as.numeric(pdata[,3])->pdata[,3]
 Site_No_ID<-as.character(pdata[,2])->pdata[2]
 
+#combine into data frame
 val<-data.frame(Site_No_ID, p.value)
 View(val)
 
-
-############# This this is the relevant output table from this analysis. Combined with Sen's Slope below.
+#Filter for significant p-values
 pmk<- val %>% filter (p.value < 0.05)
-
 View(pmk)
 
-library(broom)
-library(purrr)
-library(tidyr)
-
+#Plot histogram of the significant trends
 sig<-ggplot(pmk, aes(x = p.value)) + geom_histogram() + xlim(0, 0.05) + ylim(0, 30) + ggtitle ("P+T, I PMK")
 sig
 ```
 
-## Plot significant trend sites of P+T residuals.
+## Plot significant trend sites of for P+T residuals. These are not corrected for I
 ```{r}
 
-msigt<-merge(pmk, NDVIr)
+library(ggforce)
 
-psigt <-ggplot(msigt, aes(wat_yr, resid, group = Site_No_ID)) + 
+msigt<-merge(pmk, NDVIr6)
+
+psigt <-ggplot(msigt, aes(wat_yr, resid6, group = Site_No_ID)) + 
   geom_point()  + geom_smooth(method = "lm") + scale_color_viridis_d() + 
-  labs(x = "Water Year", y = "NDVI (90th percentile") +
-  theme(legend.position = "top") + facet_wrap (~Site_No_ID)
+  labs(x = "Water Year", y = "NDVI Change") +
+  theme(legend.position = "top") + facet_wrap (~Site_No_ID) + theme_minimal()
 psigt
 
-psigt +facet_wrap_paginate(~Site_No_ID, nrow = 3, ncol = 3, page = 1)
-psigt +facet_wrap_paginate(~Site_No_ID, nrow = 3, ncol = 3, page = 2)
-psigt +facet_wrap_paginate(~Site_No_ID, nrow = 3, ncol = 3, page = 3)
-psigt +facet_wrap_paginate(~Site_No_ID, nrow = 3, ncol = 3, page = 4)
-psigt +facet_wrap_paginate(~Site_No_ID, nrow = 3, ncol = 3, page = 5)
-psigt +facet_wrap_paginate(~Site_No_ID, nrow = 3, ncol = 3, page = 6)
-psigt +facet_wrap_paginate(~Site_No_ID, nrow = 3, ncol = 3, page = 7)
-psigt +facet_wrap_paginate(~Site_No_ID, nrow = 3, ncol = 3, page = 8)
-psigt +facet_wrap_paginate(~Site_No_ID, nrow = 3, ncol = 3, page = 9)
+psigt + facet_wrap_paginate(~Site_No_ID, nrow = 3, ncol = 4, page = 1)
+psigt + facet_wrap_paginate(~Site_No_ID, nrow = 3, ncol = 4, page = 2)
+psigt + facet_wrap_paginate(~Site_No_ID, nrow = 3, ncol = 4, page = 3)
+
 
 ```
+More trends deteced using the partial Mann-Kendall test compared to linear model with P + T + I. It must handle I as a covariate differently than in the regression where it is also interacting with T + P
 
-
-## Plot significant trend sites of P+T+I residuals.
+## Calculate Sen's Slope Estimator for each basin for the significant trends 
 ```{r}
+NDVIr6.sites<-split(NDVIr6$resid6, forcats::fct_inorder(factor(NDVIr6$Site_No_ID)))
 
-msigt<-merge(pmk, NDVIr2)
-
-psigt <-ggplot(msigt, aes(wat_yr, resid2, group = Site_No_ID)) + 
-  geom_point()  + geom_smooth(method = "lm") + scale_color_viridis_d() + 
-  labs(x = "Water Year", y = "NDVI (90th percentile") +
-  theme(legend.position = "top") + facet_wrap (~Site_No_ID)
-psigt
-
-psigt +facet_wrap_paginate(~Site_No_ID, nrow = 3, ncol = 3, page = 1)
-psigt +facet_wrap_paginate(~Site_No_ID, nrow = 3, ncol = 3, page = 2)
-psigt +facet_wrap_paginate(~Site_No_ID, nrow = 3, ncol = 3, page = 3)
-psigt +facet_wrap_paginate(~Site_No_ID, nrow = 3, ncol = 3, page = 4)
-psigt +facet_wrap_paginate(~Site_No_ID, nrow = 3, ncol = 3, page = 5)
-psigt +facet_wrap_paginate(~Site_No_ID, nrow = 3, ncol = 3, page = 6)
-psigt +facet_wrap_paginate(~Site_No_ID, nrow = 3, ncol = 3, page = 7)
-psigt +facet_wrap_paginate(~Site_No_ID, nrow = 3, ncol = 3, page = 8)
-psigt +facet_wrap_paginate(~Site_No_ID, nrow = 3, ncol = 3, page = 9)
-
-```
-
-Most of these slopes look pretty flat via the linear regression residuals P + T + I. The partial Mann-Kendall test must handle I as a covariate differntly than in the regression where it is also interacting with T + P
-
-## Calculate Sen's Slope Estimator for the significant trends
-
-```{r}
-
-NDVIr.sites<-split(NDVIr$resid, forcats::fct_inorder(factor(NDVIr$Site_No_ID)))
-
-s<- lapply(NDVIr.sites, sens.slope)
-
-library(broom)
-library(purrr)
-library(tidyr)
+s<- lapply(NDVIr6.sites, sens.slope)
 
 out <- do.call(rbind, lapply(s, function(x) 
   cbind(data.frame(p.value =  x$p.value, statistic  = x$statistic), 
@@ -750,55 +721,48 @@ out <- do.call(rbind, lapply(s, function(x)
 row.names(out) <- NULL
 out
 
-
 sig<-ggplot(out, aes(x= p.value)) + geom_histogram() + xlim(0, 0.05)+ ylim(0, 30) + ggtitle ("P+T, I PMK")
 sig
 
 ## Need to filter the sen plot by the significant trends from the PMK tests - output is 'pmk', but out does not have Site IDs attached
-
-
-
 ```
 
-Since Sens's slop estimator has not had the impervious variable, it resluts in more p-values < 0.05 compared to the PMK test. This means that we can't just filter this output by the p-value, we need to join it with the PMK outputs
-
+Since Sens's slop estimator does not have the impervious variable included, it resluts in more p-values < 0.05 compared to the PMK test. This means that we can't just filter this output by the p-value, we need to join it with the PMK analsis output df.
 
 ## Put MK outputs back together with the sites data and extract significant trends for the P + T, I
-
 ```{r}
-NDVIr<-read_excel("X:/Projects/2N Software/Science/2N Journal Papers/Urban Greeness Tracking/R Urban Greenness/NDVIr.xlsx")
 
-
-sites<-NDVIr %>%
-select(Site_No_ID)
+# Problem here is that these Sen slope numbers do not take into account correction of I - which is done in the PMK analysis
+sites<-NDVIr6%>% select(Site_No_ID)
 site<-unique(sites)
 
-# Need to merge first on the PMK outputs - Sen's p-value is different. can't do this with no Site IDs in pmk
-
+# Need to merge first on the PMK outputs - Sen's p-value is different. Can't do this with no Site IDs in pmk. 
 siten <- tibble::rowid_to_column(site, "ID")
 outn <- tibble::rowid_to_column(out, "ID")
 
 siteout<-merge(siten,outn)
+View(siteout)
 
-# Extract sites with significant trends and plot results 
+# Extract sites with significant trends and plot results - don't want to filter on Sen's p-value, want to filter on the PMK p-value
 
-sigt<- siteout %>% filter (p.value < 0.05)
-sigt
+sigt<- siteout  #%>% filter (p.value < 0.05) - merged with pmk below, which is already filtered for p < 0.05
+View(sigt)
 
-# This is th eoutput table with Sen's
-msigt<-merge(sigt, NDVIr)
+# This is th output table with Sen's slope
+msigt<-merge(sigt, NDVIr6)
 View(msigt)
 
-# need to filter it for unique sites + combine with the PMK output to get slopes for the significant trends
-
+# need to filter msigt for unique sites + combine with the PMK output to get slopes for the significant trends
 sites<-msigt %>%
 select(Site_No_ID,Sen.s.slope, statistic, Lat, Long, EPAREGION)
 site<-unique(sites)
+View(site)
 
-
-########### Output table with Sen's slope + PMK test p-values = 76 significant trends
+########### Output table with Sen's slope + PMK test p-values  ################
+# pmk already filtered for sites p< 0.05. Merge will only incldes sites listed in both dfs
 
 mpmk<-merge(pmk,site)
+View(mpmk)
 
 sen<-ggplot(mpmk, aes(x= Sen.s.slope)) + geom_histogram() +  ylim(0, 12) + ggtitle ("P+T, I PMK")
 sen
@@ -807,11 +771,13 @@ write.csv(mpmk, file = "mpmk.csv")
 
 ```
 
-Changes are on the order of 0.002 NDVI/yr, which is about 0.07 NDVI for the entire study period.  
+Changes are on the order of 0.001 NDVI/yr, which is about 0.07 NDVI for the entire study period.  
 Most of these trends are negative
 
-## Make some maps from the trend results
+32 Significant trends detected - 10 positive + 22 negative
 
+
+## Make some maps from the trend results
 ```{r}
 library(maps)
 library(ggthemes)
@@ -854,38 +820,32 @@ usac
 
 
 ```{r}
-# NDVI Trends map
 
-map <- usa +
-  geom_point(aes(x = Long, y = Lat, color = Sen.s.slope, size = p.value),
-          data = mpmk, 
-          alpha = .4) + scale_size_continuous(range = c(1, 10)) +
-          labs(size = 'p.value') + theme_void() 
-map
-  
 
-# Map of initial NDVI
-m <- map + scale_color_gradient(low = "mediumpurple4", high = "springgreen2") 
-m
+# Map of initial NDVI 
 
 nap <- usa +
   geom_point(aes(x = Long, y = Lat, color = NDVI_urban, size = Urban_area_km2),
-          data = NDVIr, 
+          data = NDVIr6, 
           alpha = .4) + scale_size_continuous(range = c(1, 10)) +
           labs(size = 'Urban_area_km2') + theme_void() 
-nap
-  
 
 # colors + legends
 n <- nap + scale_color_gradient(low = "mediumpurple4", high = "springgreen2") 
 n
 
+# NDVI Trends map
 
+map <- usa +
+  geom_point(aes(x = Long, y = Lat, color = Sen.s.slope, size = p.value),
+          data = mpmk, 
+          alpha = .6) + scale_size_continuous(range = c(10, 1)) +
+          labs(size = 'p.value') + theme_void() 
 
+m <- map + scale_color_gradient(low = "mediumpurple4", high = "springgreen2") 
+m
 
 ```
-
-
 
 
 ## Multivariate T+P+I NDVI Regressions + store P + T  residuals in same data frame for the short time series 2000-2019
@@ -920,8 +880,6 @@ sig
 # Put MK outputs back together with the sites data and extract significant trends for 2000-2019
 
 ```{r}
-
-
 sites<-NDVIr3 %>%
 select(Site_No_ID)
 site<-unique(sites)
@@ -947,4 +905,4 @@ psigt <-ggplot(msigt, aes(wat_yr,  resid7, group = Site_No_ID)) +
 psigt
 
 
-
+```
